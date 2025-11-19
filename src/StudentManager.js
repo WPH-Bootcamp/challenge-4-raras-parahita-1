@@ -18,8 +18,39 @@ class StudentManager {
   // Properti yang dibutuhkan:
   // - students: Array untuk menyimpan semua siswa
   
-  constructor() {
-    // Implementasi constructor di sini
+  constructor(dataFilePath = path.join(process.cwd(), "data", "students.json")) {
+    this.dataFilePath = dataFilePath;
+    this.students = [];
+    this._loadFromFile();
+  }
+
+  _ensureDataDir() {
+    const dir = path.dirname(this.dataFilePath);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  }
+
+  _loadFromFile() {
+    try {
+      this._ensureDataDir();
+      if (!fs.existsSync(this.dataFilePath)) {
+        fs.writeFileSync(this.dataFilePath, JSON.stringify([], null, 2), "utf8");
+      }
+      const raw = fs.readFileSync(this.dataFilePath, "utf8");
+      const arr = JSON.parse(raw || "[]");
+      this.students = arr.map((o) => Student.fromObject(o));
+    } catch (err) {
+      console.error("Error loading students data:", err.message);
+      this.students = [];
+    }
+  }
+
+  _saveToFile() {
+    try {
+      const arr = this.students.map((s) => s.toJSON());
+      fs.writeFileSync(this.dataFilePath, JSON.stringify(arr, null, 2), "utf8");
+    } catch (err) {
+      console.error("Error saving students data:", err.message);
+    }
   }
 
   /**
@@ -29,7 +60,13 @@ class StudentManager {
    * TODO: Validasi bahwa ID belum digunakan
    */
   addStudent(student) {
-    // Implementasi method di sini
+    const id = student && student.id ? String(student.id) : null;
+    if (!id) throw new Error("Student must have an id");
+    if (this.findStudent(id)) return false;
+    const s = student instanceof Student ? student : Student.fromObject(student);
+    this.students.push(s);
+    this._saveToFile();
+    return true;
   }
 
   /**
@@ -39,7 +76,11 @@ class StudentManager {
    * TODO: Cari dan hapus siswa dari array
    */
   removeStudent(id) {
-    // Implementasi method di sini
+    const idx = this.students.findIndex((s) => s.id === String(id));
+    if (idx === -1) return false;
+    this.students.splice(idx, 1);
+    this._saveToFile();
+    return true;
   }
 
   /**
@@ -49,7 +90,7 @@ class StudentManager {
    * TODO: Gunakan method array untuk mencari siswa
    */
   findStudent(id) {
-    // Implementasi method di sini
+    return this.students.find((s) => s.id === String(id)) || null;
   }
 
   /**
@@ -59,8 +100,13 @@ class StudentManager {
    * @returns {boolean} true jika berhasil, false jika tidak ditemukan
    * TODO: Cari siswa dan update propertinya
    */
-  updateStudent(id, data) {
-    // Implementasi method di sini
+  updateStudent(id, data = {}) {
+    const s = this.findStudent(id);
+    if (!s) return false;
+    if (data.name !== undefined && String(data.name).trim().length > 0) s.name = String(data.name).trim();
+    if (data.klass !== undefined && String(data.klass).trim().length > 0) s.klass = String(data.klass).trim();
+    this._saveToFile();
+    return true;
   }
 
   /**
@@ -68,7 +114,7 @@ class StudentManager {
    * @returns {Array} Array berisi semua siswa
    */
   getAllStudents() {
-    // Implementasi method di sini
+    return this.students.slice();
   }
 
   /**
@@ -77,8 +123,18 @@ class StudentManager {
    * @returns {Array} Array berisi top n siswa
    * TODO: Sort siswa berdasarkan rata-rata (descending) dan ambil n teratas
    */
-  getTopStudents(n) {
-    // Implementasi method di sini
+  getTopStudents(n = 3) {
+    return this.students
+      .slice()
+      .sort((a, b) => {
+        const aa = a.getAverage();
+        const bb = b.getAverage();
+        if (aa === null && bb === null) return 0;
+        if (aa === null) return 1;
+        if (bb === null) return -1;
+        return bb - aa;
+      })
+      .slice(0, n);
   }
 
   /**
@@ -95,7 +151,15 @@ class StudentManager {
    * @returns {Array} Array siswa dalam kelas tersebut
    */
   getStudentsByClass(className) {
-    // Implementasi method di sini (BONUS)
+    if (this.students.length === 0) {
+      console.log("No students found.");
+      return;
+    }
+    for (const s of this.students) {
+      console.log("---------------------------------");
+      s.displayInfo();
+    }
+    console.log("---------------------------------");
   }
 
   /**
@@ -104,7 +168,20 @@ class StudentManager {
    * @returns {object} Object berisi statistik (jumlah siswa, rata-rata kelas, dll)
    */
   getClassStatistics(className) {
-    // Implementasi method di sini (BONUS)
+    const list = this.getStudentsByClass(className);
+    if (list.length === 0) return null;
+    const sum = list.reduce((acc, s) => acc + (s.getAverage() ?? 0), 0);
+    const avg = sum / list.length;
+    return { studentCount: list.length, classAverage: avg };
+  }
+
+  // add grade helper
+  addGradeToStudent(id, subject, score) {
+    const s = this.findStudent(id);
+    if (!s) throw new Error(`Student with id ${id} not found`);
+    s.addGrade(subject, score);
+    this._saveToFile();
+    return s;
   }
 }
 
